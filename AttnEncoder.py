@@ -46,24 +46,21 @@ class AttnEncoder(nn.Module):
 		# hidden , (_, _) = self.lstm_i2h(x_transpose)
 
 		if (self.cell_type == 'LSTM'):
-			hidden, (_, _) = self.lstm_i2h(x_transpose)
+			hidden, (h_n, c_n) = self.lstm_i2h(x_transpose)
+			h_N = c_n[-1]
 		elif (self.cell_type == 'RNN'):
-			hidden, _ = self.rnn_i2h(x_transpose)
+			hidden, h_n = self.rnn_i2h(x_transpose)
+			h_N = h_n[-1]
 
 		# final hidden vector - dim - (batch, hidden_dim)
-		h_N = hidden[-1]
 
-		if (use_cuda):
-			attn_energies_tensor = torch.zeros(seq_len, batch_size).cuda()
-		else:
-			attn_energies_tensor = torch.zeros(seq_len, batch_size)
-		attn_energies = Variable(attn_energies_tensor)
+		# for i in range(seq_len):
+		# 	attn_energies[i] = self.score(h_N, hidden[i])
 
-		for i in range(seq_len):
-			attn_energies[i] = self.score(h_N, hidden[i])
+		attn_energies = self.score( h_N.repeat(seq_len, 1, 1) , hidden )
 
 		attn_energies = torch.transpose(attn_energies, 1, 0)
-		attn_weights = F.sigmoid(attn_energies)
+		attn_weights = F.softmax(attn_energies, dim=1)
 
 		context_vec = torch.bmm(attn_weights.unsqueeze(1), torch.transpose(hidden, 1, 0)).squeeze(1)
 
@@ -78,10 +75,10 @@ class AttnEncoder(nn.Module):
 
 
 	def score(self, final_hidden, encoder_output):
-		hidden_enc_out = torch.cat((final_hidden, encoder_output), dim=1)
+		hidden_enc_out = torch.cat((final_hidden, encoder_output), dim=2)
 		out_1 = F.tanh(self.linear1(hidden_enc_out))
 		out_2 = self.linear2(out_1)
-		return out_2.squeeze(1)
+		return out_2.squeeze(2)
 
 
 
